@@ -1,0 +1,7 @@
+phobert_base/
+phobert_large/
+VnCoreNLP-master/
+models/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc

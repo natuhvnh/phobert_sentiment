@@ -24,10 +24,10 @@ from utils import *
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--train_path', type=str, default='./data/train.csv')
-parser.add_argument('--dict_path', type=str, default="./phobert/dict.txt")
-parser.add_argument('--config_path', type=str, default="./phobert/config.json")
-parser.add_argument('--rdrsegmenter_path', type=str, required=True)
-parser.add_argument('--pretrained_path', type=str, default='./phobert/model.bin')
+parser.add_argument('--dict_path', type=str, default="./phobert_base/dict.txt")
+parser.add_argument('--config_path', type=str, default="./phobert_base/config.json")
+parser.add_argument('--rdrsegmenter_path', type=str, default='/home/tuna/FDM/MarketSentiment/PhoBert-Sentiment-Classification/VnCoreNLP-master/VnCoreNLP-1.1.1.jar')
+parser.add_argument('--pretrained_path', type=str, default='./phobert_base/model.bin')
 parser.add_argument('--max_sequence_length', type=int, default=256)
 parser.add_argument('--batch_size', type=int, default=24)
 parser.add_argument('--accumulation_steps', type=int, default=5)
@@ -36,11 +36,11 @@ parser.add_argument('--fold', type=int, default=0)
 parser.add_argument('--seed', type=int, default=69)
 parser.add_argument('--lr', type=float, default=3e-5)
 parser.add_argument('--ckpt_path', type=str, default='./models')
-parser.add_argument('--bpe-codes', default="./phobert/bpe.codes",type=str, help='path to fastBPE BPE')
+parser.add_argument('--bpe-codes', default="./phobert_base/bpe.codes",type=str, help='path to fastBPE BPE')
 
 args = parser.parse_args()
 bpe = fastBPE(args)
-rdrsegmenter = VnCoreNLP(args.rdrsegmenter_path, annotators="wseg", max_heap_size='-Xmx500m') 
+rdrsegmenter = VnCoreNLP(args.rdrsegmenter_path, annotators="wseg", max_heap_size='-Xmx500m') # segmentation words
 
 seed_everything(69)
 
@@ -51,25 +51,26 @@ config = RobertaConfig.from_pretrained(
     num_labels=1
 )
 
-model_bert = RobertaForAIViVN.from_pretrained(args.pretrained_path, config=config)
+model_bert = RobertaForAIViVN.from_pretrained(args.pretrained_path, config=config) # config roberta with phobert pretrain
 model_bert.cuda()
 
-if torch.cuda.device_count():
-    print(f"Training using {torch.cuda.device_count()} gpus")
-    model_bert = nn.DataParallel(model_bert)
-    tsfm = model_bert.module.roberta
-else:
-    tsfm = model_bert.roberta
+# if torch.cuda.device_count():
+#     print(f"Training using {torch.cuda.device_count()} gpus")
+#     model_bert = nn.DataParallel(model_bert)
+#     tsfm = model_bert.module.roberta
+# else:
+#     tsfm = model_bert.roberta
+tsfm = model_bert.roberta # add congif to roberta model
 
 # Load the dictionary  
-vocab = Dictionary()
+vocab = Dictionary() # create dictionary
 vocab.add_from_file(args.dict_path)
 
 # Load training data
-train_df = pd.read_csv(args.train_path,sep='\t').fillna("###")
+train_df = pd.read_csv(args.train_path,sep='\t').fillna("###") # 16087 rows
 train_df.text = train_df.text.progress_apply(lambda x: ' '.join([' '.join(sent) for sent in rdrsegmenter.tokenize(x)]))
 y = train_df.label.values
-X_train = convert_lines(train_df, vocab, bpe,args.max_sequence_length)
+X_train = convert_lines(train_df, vocab, bpe,args.max_sequence_length) # 16087, 256
 
 # Creating optimizer and lr schedulers
 param_optimizer = list(model_bert.named_parameters())
@@ -106,7 +107,7 @@ for fold, (train_idx, val_idx) in enumerate(splits):
         if epoch > 0 and frozen:
             for child in tsfm.children():
                 for param in child.parameters():
-                    param.requires_grad = True
+                    param.requires_grad = True # requires_grad = True, it means that all the parameters are learnable and will update on training the model
             frozen = False
             del scheduler0
             torch.cuda.empty_cache()
@@ -120,7 +121,7 @@ for fold, (train_idx, val_idx) in enumerate(splits):
         optimizer.zero_grad()
         pbar = tqdm(enumerate(train_loader),total=len(train_loader),leave=False)
         for i,(x_batch, y_batch) in pbar:
-            model_bert.train()
+            model_bert.train() # switch to trainning mode (default is evaluation mode)
             y_pred = model_bert(x_batch.cuda(), attention_mask=(x_batch>0).cuda())
             loss =  F.binary_cross_entropy_with_logits(y_pred.view(-1).cuda(),y_batch.float().cuda())
             loss = loss.mean()
@@ -136,7 +137,7 @@ for fold, (train_idx, val_idx) in enumerate(splits):
             pbar.set_postfix(loss = lossf)
             avg_loss += loss.item() / len(train_loader)
 
-        model_bert.eval()
+        model_bert.eval() # switch to evaluation mode
         pbar = tqdm(enumerate(valid_loader),total=len(valid_loader),leave=False)
         for i,(x_batch, y_batch) in pbar:
             y_pred = model_bert(x_batch.cuda(), attention_mask=(x_batch>0).cuda())

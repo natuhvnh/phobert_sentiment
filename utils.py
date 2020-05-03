@@ -8,7 +8,7 @@ import os
 import torch
 
 def convert_lines(df, vocab, bpe, max_sequence_length):
-    outputs = np.zeros((len(df), max_sequence_length))
+    outputs = np.zeros((len(df), max_sequence_length)) # 16087, 256
     
     cls_id = 0
     eos_id = 2
@@ -16,7 +16,7 @@ def convert_lines(df, vocab, bpe, max_sequence_length):
 
     for idx, row in tqdm(df.iterrows(), total=len(df)): 
         subwords = bpe.encode('<s> '+row.text+' </s>')
-        input_ids = vocab.encode_line(subwords, append_eos=False, add_if_not_exist=False).long().tolist()
+        input_ids = vocab.encode_line(subwords, append_eos=False, add_if_not_exist=False).long().tolist() # convert each subwords to index based on dictionary
         if len(input_ids) > max_sequence_length: 
             input_ids = input_ids[:max_sequence_length] 
             input_ids[-1] = eos_id

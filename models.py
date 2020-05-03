@@ -77,7 +77,7 @@ class RobertaForAIViVN(BertPreTrainedModel):
                             attention_mask=attention_mask,
 #                            token_type_ids=token_type_ids,
                             position_ids=position_ids,
-                            head_mask=head_mask)
-       cls_output = torch.cat((outputs[2][-1][:,0, ...],outputs[2][-2][:,0, ...], outputs[2][-3][:,0, ...], outputs[2][-4][:,0, ...]),-1)
+                            head_mask=head_mask) # https://huggingface.co/transformers/model_doc/bert.html (bert forward output with output_hidden_states=True)
+       cls_output = torch.cat((outputs[2][-1][:,0, ...],outputs[2][-2][:,0, ...], outputs[2][-3][:,0, ...], outputs[2][-4][:,0, ...]),-1) # ignore all except the first vector (the one associated with the [CLS] token) for classification task
        logits = self.qa_outputs(cls_output)
        return logits
